@@ -1,0 +1,185 @@
+from bson import ObjectId
+from datetime import datetime
+from src.lib.db import get_db
+from src.lib.cloudinary import upload_image
+from src.lib.socket import get_receiver_socket_id, emit_new_message, emit_online_users
+
+
+async def get_all_contacts(user_id: str):
+    """Get all users except the logged-in user"""
+    try:
+        db = get_db()
+        
+        if not ObjectId.is_valid(user_id):
+            return {"error": "Invalid user ID"}, 400
+        
+        # Find all users except the logged-in user, excluding password
+        users = await db["users"].find(
+            {"_id": {"$ne": ObjectId(user_id)}},
+            {"password": 0}
+        ).to_list(None)
+        
+        # Convert ObjectId to string
+        for user in users:
+            user["_id"] = str(user["_id"])
+        
+        return users, 200
+        
+    except Exception as e:
+        print(f"Error in get_all_contacts: {e}")
+        return {"error": "Server error"}, 500
+
+
+async def get_messages_by_user_id(my_id: str, user_to_chat_id: str):
+    """Get all messages between two users"""
+    try:
+        db = get_db()
+        
+        # Validate IDs
+        if not ObjectId.is_valid(my_id) or not ObjectId.is_valid(user_to_chat_id):
+            return {"error": "Invalid user ID"}, 400
+        
+        my_id_obj = ObjectId(my_id)
+        user_to_chat_id_obj = ObjectId(user_to_chat_id)
+        
+        # Find messages where users are sender or receiver
+        messages = await db["messages"].find({
+            "$or": [
+                {"senderId": my_id_obj, "receiverId": user_to_chat_id_obj},
+                {"senderId": user_to_chat_id_obj, "receiverId": my_id_obj}
+            ]
+        }).to_list(None)
+        
+        # Convert ObjectIds to strings
+        for message in messages:
+            message["_id"] = str(message["_id"])
+            message["senderId"] = str(message["senderId"])
+            message["receiverId"] = str(message["receiverId"])
+            # Convert datetime objects to ISO strings
+            if isinstance(message.get("createdAt"), datetime):
+                message["createdAt"] = message["createdAt"].isoformat()
+            if isinstance(message.get("updatedAt"), datetime):
+                message["updatedAt"] = message["updatedAt"].isoformat()
+        
+        return messages, 200
+        
+    except Exception as e:
+        print(f"Error in get_messages_by_user_id: {e}")
+        return {"error": "Internal server error"}, 500
+
+
+async def send_message(sender_id: str, receiver_id: str, text: str = None, image: str = None):
+    """Send a message from one user to another"""
+    try:
+        db = get_db()
+        
+        # Validate input
+        if not text and not image:
+            return {"error": "Text or image is required."}, 400
+        
+        # Validate IDs
+        if not ObjectId.is_valid(sender_id) or not ObjectId.is_valid(receiver_id):
+            return {"error": "Invalid user ID"}, 400
+        
+        sender_id_obj = ObjectId(sender_id)
+        receiver_id_obj = ObjectId(receiver_id)
+        
+        # Check if user is trying to send message to themselves
+        if sender_id_obj == receiver_id_obj:
+            return {"error": "Cannot send messages to yourself."}, 400
+        
+        # Check if receiver exists
+        receiver_exists = await db["users"].find_one({"_id": receiver_id_obj})
+        if not receiver_exists:
+            return {"error": "Receiver not found."}, 404
+        
+        # Handle image upload if provided
+        image_url = None
+        if image:
+            try:
+                image_url = upload_image(image)
+            except Exception as e:
+                print(f"Error uploading image: {e}")
+                return {"error": "Failed to upload image"}, 500
+        
+        # Create new message
+        now = datetime.utcnow()
+        new_message = {
+            "senderId": sender_id_obj,
+            "receiverId": receiver_id_obj,
+            "text": text,
+            "image": image_url,
+            "createdAt": now,
+            "updatedAt": now
+        }
+        
+        result = await db["messages"].insert_one(new_message)
+        
+        if result.inserted_id:
+            # Convert for response (datetime to ISO string for JSON serialization)
+            response_message = {
+                "_id": str(result.inserted_id),
+                "senderId": str(sender_id_obj),
+                "receiverId": str(receiver_id_obj),
+                "text": text,
+                "image": image_url,
+                "createdAt": now.isoformat(),
+                "updatedAt": now.isoformat()
+            }
+            
+            # Emit message to receiver in real-time if they're connected
+            await emit_new_message(receiver_id, response_message)
+            
+            return response_message, 201
+        else:
+            return {"error": "Failed to send message"}, 400
+            
+    except Exception as e:
+        print(f"Error in send_message controller: {e}")
+        return {"error": "Internal server error"}, 500
+
+
+async def get_chat_partners(user_id: str):
+    """Get all users that the logged-in user has messages with"""
+    try:
+        db = get_db()
+        
+        if not ObjectId.is_valid(user_id):
+            return {"error": "Invalid user ID"}, 400
+        
+        user_id_obj = ObjectId(user_id)
+        
+        # Find all messages where the user is sender or receiver
+        messages = await db["messages"].find({
+            "$or": [
+                {"senderId": user_id_obj},
+                {"receiverId": user_id_obj}
+            ]
+        }).to_list(None)
+        
+        # Extract unique chat partner IDs
+        chat_partner_ids = set()
+        for msg in messages:
+            if msg["senderId"] == user_id_obj:
+                chat_partner_ids.add(msg["receiverId"])
+            else:
+                chat_partner_ids.add(msg["senderId"])
+        
+        # Convert to ObjectId list for query
+        chat_partner_ids_obj = [ObjectId(str(id)) for id in chat_partner_ids]
+        
+        # Get chat partners, excluding password
+        chat_partners = await db["users"].find(
+            {"_id": {"$in": chat_partner_ids_obj}},
+            {"password": 0}
+        ).to_list(None)
+        
+        # Convert ObjectIds to strings
+        for partner in chat_partners:
+            partner["_id"] = str(partner["_id"])
+        
+        return chat_partners, 200
+        
+    except Exception as e:
+        print(f"Error in get_chat_partners: {e}")
+        return {"error": "Internal server error"}, 500
