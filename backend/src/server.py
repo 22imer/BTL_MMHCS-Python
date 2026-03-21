@@ -50,18 +50,24 @@ if config.NODE_ENV == "development":
     @fastapi_app.middleware("http")
     async def add_cors_header(request, call_next):
         origin = request.headers.get("origin")
+        
+        # Handle preflight OPTIONS request BEFORE call_next
+        if request.method == "OPTIONS":
+            from fastapi import Response
+            response = Response()
+            if origin:
+                response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+            response.status_code = 200
+            return response
+        
+        # Process normal request
         response = await call_next(request)
         
         if origin:
             response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-        
-        # Handle preflight
-        if request.method == "OPTIONS":
-            if origin:
-                response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
             response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
             response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
