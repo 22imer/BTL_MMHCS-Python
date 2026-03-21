@@ -69,17 +69,26 @@ export const useChatStore = create((set, get) => ({
       text: messageData.text,
       image: messageData.image,
       createdAt: new Date().toISOString(),
-      isOptimistic: true, // flag to identify optimistic messages (optional)
+      isOptimistic: true,
     };
-    // immidetaly update the ui by adding the message
+    
+    // Update UI immediately with optimistic message
     set({ messages: [...messages, optimisticMessage] });
+    console.log("[Chat] Sending message to:", selectedUser._id);
 
     try {
       const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
-      set({ messages: messages.concat(res.data) });
+      console.log("[Chat] Message sent successfully, response:", res.data);
+      
+      // Remove optimistic message and add real one from server
+      const currentMessages = get().messages;
+      const withoutOptimistic = currentMessages.filter((m) => m._id !== tempId);
+      set({ messages: [...withoutOptimistic, res.data] });
     } catch (error) {
+      console.error("[Chat] Error sending message:", error);
       // remove optimistic message on failure
-      set({ messages: messages });
+      const currentMessages = get().messages;
+      set({ messages: currentMessages.filter((m) => m._id !== tempId) });
       toast.error(error.response?.data?.message || "Something went wrong");
     }
   },
@@ -89,18 +98,31 @@ export const useChatStore = create((set, get) => ({
     if (!selectedUser) return;
 
     const socket = useAuthStore.getState().socket;
+    if (!socket) {
+      console.warn("[Chat] Socket not available yet");
+      return;
+    }
+
+    console.log("[Chat] Subscribing to messages from user:", selectedUser._id);
+    console.log("[Chat] Socket connected?", socket.connected);
 
     socket.on("newMessage", (newMessage) => {
+      console.log("[Chat] Received newMessage:", newMessage);
       const isMessageSentFromSelectedUser = newMessage.senderId === selectedUser._id;
-      if (!isMessageSentFromSelectedUser) return;
+      console.log("[Chat] Message from selected user?", isMessageSentFromSelectedUser);
+      
+      if (!isMessageSentFromSelectedUser) {
+        console.log("[Chat] Ignoring message from different user");
+        return;
+      }
 
       const currentMessages = get().messages;
+      console.log("[Chat] Adding message to messages array");
       set({ messages: [...currentMessages, newMessage] });
 
       if (isSoundEnabled) {
         const notificationSound = new Audio("/sounds/notification.mp3");
-
-        notificationSound.currentTime = 0; // reset to start
+        notificationSound.currentTime = 0;
         notificationSound.play().catch((e) => console.log("Audio play failed:", e));
       }
     });
@@ -108,6 +130,9 @@ export const useChatStore = create((set, get) => ({
 
   unsubscribeFromMessages: () => {
     const socket = useAuthStore.getState().socket;
-    socket.off("newMessage");
+    if (socket) {
+      socket.off("newMessage");
+      console.log("[Chat] Unsubscribed from messages");
+    }
   },
 }));

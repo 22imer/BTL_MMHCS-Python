@@ -40,23 +40,27 @@ async def emit_online_users():
 
 async def emit_new_message(receiver_id: str, message_data: dict):
     """Emit new message to receiver if they're online"""
+    logger.info(f"[Socket.IO] emit_new_message() called for receiver: {receiver_id}")
     receiver_socket_id = get_receiver_socket_id(receiver_id)
-    logger.info(f"Attempting to emit message to receiver {receiver_id}")
-    logger.info(f"Online users: {get_online_users()}")
-    logger.info(f"Receiver socket ID: {receiver_socket_id}")
+    logger.info(f"[Socket.IO] Online users: {get_online_users()}")
+    logger.info(f"[Socket.IO] Receiver socket ID: {receiver_socket_id}")
     
     if receiver_socket_id:
-        await sio.emit("newMessage", message_data, room=receiver_socket_id)
-        logger.info(f"Message emitted successfully to socket {receiver_socket_id}")
+        try:
+            await sio.emit("newMessage", message_data, room=receiver_socket_id)
+            logger.info(f"[Socket.IO] Message emitted successfully to socket {receiver_socket_id}")
+        except Exception as e:
+            logger.error(f"[Socket.IO] Error emitting message: {e}")
     else:
-        logger.warning(f"Receiver {receiver_id} is not online or not registered")
+        logger.warning(f"[Socket.IO] Receiver {receiver_id} is not online or not registered in user_socket_map")
 
 
 @sio.event
 async def connect(sid, environ):
     """Handle client connection"""
     try:
-        logger.info(f"Client {sid} connected")
+        logger.info(f"[Socket.IO] Client {sid} connected")
+        logger.info(f"[Socket.IO] Current online users: {get_online_users()}")
     except Exception as e:
         logger.error(f"Error in connect handler: {e}")
 
@@ -74,7 +78,7 @@ async def disconnect(sid):
                 break
         
         if user_id:
-            logger.info(f"User {user_id} disconnected (socket: {sid})")
+            logger.info(f"[Socket.IO] User {user_id} disconnected (socket: {sid})")
             # Broadcast updated online users list
             await emit_online_users()
     except Exception as e:
@@ -88,7 +92,9 @@ async def user_connected(sid, data):
         user_id = data.get("userId")
         if user_id:
             user_socket_map[str(user_id)] = sid
-            logger.info(f"User {user_id} is now online (socket: {sid})")
+            logger.info(f"[Socket.IO] User {user_id} registered online (socket: {sid})")
+            logger.info(f"[Socket.IO] Total online users: {len(user_socket_map)}")
+            logger.info(f"[Socket.IO] Online users map: {user_socket_map}")
             # Broadcast updated online users list
             await emit_online_users()
     except Exception as e:

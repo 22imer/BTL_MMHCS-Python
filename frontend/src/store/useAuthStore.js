@@ -94,19 +94,42 @@ export const useAuthStore = create((set, get) => ({
     const { authUser } = get();
     if (!authUser || get().socket?.connected) return;
 
-    const socket = io(getSocketUrl(), {
-      withCredentials: true, // this ensures cookies are sent with the connection
+    const socketUrl = getSocketUrl();
+    console.log("[Socket.IO] Connecting to:", socketUrl);
+
+    const socket = io(socketUrl, {
+      withCredentials: true,
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 5,
+      transports: ["websocket", "polling"],
     });
 
-    socket.connect();
+    socket.on("connect", () => {
+      console.log("[Socket.IO] Connected with ID:", socket.id);
+      // Emit user connected event with user ID after connection established
+      socket.emit("user_connected", { userId: authUser._id });
+      console.log("[Socket.IO] Emitted user_connected for user:", authUser._id);
+    });
+
+    socket.on("disconnect", () => {
+      console.log("[Socket.IO] Disconnected");
+    });
+
+    socket.on("error", (error) => {
+      console.error("[Socket.IO] Error:", error);
+    });
+
+    socket.on("connect_error", (error) => {
+      console.error("[Socket.IO] Connection error:", error);
+    });
 
     set({ socket });
 
-    // Emit user connected event with user ID
-    socket.emit("user_connected", { userId: authUser._id });
-
     // listen for online users event
     socket.on("getOnlineUsers", (userIds) => {
+      console.log("[Socket.IO] Online users:", userIds);
       set({ onlineUsers: userIds });
     });
   },

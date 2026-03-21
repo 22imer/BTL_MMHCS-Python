@@ -71,6 +71,7 @@ async def get_messages_by_user_id(my_id: str, user_to_chat_id: str):
 async def send_message(sender_id: str, receiver_id: str, text: str = None, image: str = None):
     """Send a message from one user to another"""
     try:
+        print(f"[Message] Sending message from {sender_id} to {receiver_id}")
         db = get_db()
         
         # Validate input
