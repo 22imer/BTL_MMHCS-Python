@@ -42,9 +42,16 @@ fastapi_app = FastAPI(
 )
 
 # Add CORS middleware
+# In development: allow all origins for cross-machine communication
+# In production: restrict to CLIENT_URL only
+cors_origins = (
+    ["*"] if config.NODE_ENV == "development"
+    else [config.CLIENT_URL]
+)
+
 fastapi_app.add_middleware(
     CORSMiddleware,
-    allow_origins=[config.CLIENT_URL, "http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -3,8 +3,17 @@ import { axiosInstance } from "../lib/axios";
 import toast from "react-hot-toast";
 import { io } from "socket.io-client";
 
-const BASE_URL =
-  import.meta.env.MODE === "development" ? "http://localhost:3000" : "/";
+// Dynamically determine Socket.IO server URL based on current location
+// In development: use same hostname as frontend but with backend port (3000)
+// In production: use relative path (same origin)
+const getSocketUrl = () => {
+  if (import.meta.env.MODE === "development") {
+    const protocol = window.location.protocol; // http: or https:
+    const hostname = window.location.hostname;
+    return `${protocol}//${hostname}:3000`;
+  }
+  return window.location.origin;
+};
 
 export const useAuthStore = create((set, get) => ({
   authUser: null,
@@ -85,7 +94,7 @@ export const useAuthStore = create((set, get) => ({
     const { authUser } = get();
     if (!authUser || get().socket?.connected) return;
 
-    const socket = io(BASE_URL, {
+    const socket = io(getSocketUrl(), {
       withCredentials: true, // this ensures cookies are sent with the connection
     });
 

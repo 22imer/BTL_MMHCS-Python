@@ -1,15 +1,21 @@
 import axios from "axios";
 
-const API_BASE_URL =
-  import.meta.env.MODE === "development"
-    ? "http://localhost:3000"
-    : window.location.origin;
+// Dynamically determine API base URL based on current location
+// In development: use same hostname as frontend but with backend port (3000)
+// In production: use relative path (same origin)
+const getApiBaseUrl = () => {
+  if (import.meta.env.MODE === "development") {
+    const protocol = window.location.protocol; // http: or https:
+    const hostname = window.location.hostname;
+    return `${protocol}//${hostname}:3000`;
+  }
+  return window.location.origin;
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export const axiosInstance = axios.create({
-  baseURL:
-    import.meta.env.MODE === "development"
-      ? "http://localhost:3000/api"
-      : "/api",
+  baseURL: `${API_BASE_URL}/api`,
   withCredentials: true,
 });
 

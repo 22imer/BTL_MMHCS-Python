@@ -41,8 +41,15 @@ async def emit_online_users():
 async def emit_new_message(receiver_id: str, message_data: dict):
     """Emit new message to receiver if they're online"""
     receiver_socket_id = get_receiver_socket_id(receiver_id)
+    logger.info(f"Attempting to emit message to receiver {receiver_id}")
+    logger.info(f"Online users: {get_online_users()}")
+    logger.info(f"Receiver socket ID: {receiver_socket_id}")
+    
     if receiver_socket_id:
         await sio.emit("newMessage", message_data, room=receiver_socket_id)
+        logger.info(f"Message emitted successfully to socket {receiver_socket_id}")
+    else:
+        logger.warning(f"Receiver {receiver_id} is not online or not registered")
 
 
 @sio.event
