@@ -71,15 +71,18 @@ export const useChatStore = create((set, get) => ({
       createdAt: new Date().toISOString(),
       isOptimistic: true,
     };
-    
+
     // Update UI immediately with optimistic message
     set({ messages: [...messages, optimisticMessage] });
     console.log("[Chat] Sending message to:", selectedUser._id);
 
     try {
-      const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
+      const res = await axiosInstance.post(
+        `/messages/send/${selectedUser._id}`,
+        messageData,
+      );
       console.log("[Chat] Message sent successfully, response:", res.data);
-      
+
       // Remove optimistic message and add real one from server
       const currentMessages = get().messages;
       const withoutOptimistic = currentMessages.filter((m) => m._id !== tempId);
@@ -108,9 +111,13 @@ export const useChatStore = create((set, get) => ({
 
     socket.on("newMessage", (newMessage) => {
       console.log("[Chat] Received newMessage:", newMessage);
-      const isMessageSentFromSelectedUser = newMessage.senderId === selectedUser._id;
-      console.log("[Chat] Message from selected user?", isMessageSentFromSelectedUser);
-      
+      const isMessageSentFromSelectedUser =
+        newMessage.senderId === selectedUser._id;
+      console.log(
+        "[Chat] Message from selected user?",
+        isMessageSentFromSelectedUser,
+      );
+
       if (!isMessageSentFromSelectedUser) {
         console.log("[Chat] Ignoring message from different user");
         return;
@@ -123,7 +130,9 @@ export const useChatStore = create((set, get) => ({
       if (isSoundEnabled) {
         const notificationSound = new Audio("/sounds/notification.mp3");
         notificationSound.currentTime = 0;
-        notificationSound.play().catch((e) => console.log("Audio play failed:", e));
+        notificationSound
+          .play()
+          .catch((e) => console.log("Audio play failed:", e));
       }
     });
   },

@@ -2,8 +2,8 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import os
 
 # Socket.IO setup
@@ -41,21 +41,44 @@ fastapi_app = FastAPI(
     lifespan=lifespan
 )
 
-# Add CORS middleware
-# In development: allow all origins for cross-machine communication
+# Add CORS middleware with custom logic
+# In development: dynamically allow any origin with credentials
 # In production: restrict to CLIENT_URL only
-cors_origins = (
-    ["*"] if config.NODE_ENV == "development"
-    else [config.CLIENT_URL]
-)
-
-fastapi_app.add_middleware(
-    CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if config.NODE_ENV == "development":
+    # Dynamic CORS: Allow any origin with credentials in development
+    # This bypasses the wildcard restriction by dynamically mirroring the Origin header
+    @fastapi_app.middleware("http")
+    async def add_cors_header(request, call_next):
+        origin = request.headers.get("origin")
+        response = await call_next(request)
+        
+        if origin:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        
+        # Handle preflight
+        if request.method == "OPTIONS":
+            if origin:
+                response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        
+        return response
+    
+    logger.info("Development CORS: Allowing all origins with credentials dynamically")
+else:
+    # Production: use standard CORS middleware
+    fastapi_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[config.CLIENT_URL],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    logger.info(f"Production CORS: Allow only {config.CLIENT_URL}")
 
 # Include routers
 fastapi_app.include_router(auth_router)
