@@ -35,7 +35,8 @@ def get_online_users() -> list:
 
 async def emit_online_users():
     """Broadcast online users list to all connected clients"""
-    await sio.emit("getOnlineUsers", get_online_users(), broadcast=True)
+    # In python-socketio, emit without specifying a room broadcasts to all clients
+    await sio.emit("getOnlineUsers", get_online_users())
 
 
 async def emit_new_message(receiver_id: str, message_data: dict):
