@@ -104,7 +104,7 @@ async def send_message(sender_id: str, receiver_id: str, text: str = None, image
                 return {"error": "Failed to upload image"}, 500
         
         # Create new message
-        now = datetime.utcnow()
+        now = datetime.now()
         new_message = {
             "senderId": sender_id_obj,
             "receiverId": receiver_id_obj,
